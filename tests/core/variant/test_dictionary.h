@@ -573,6 +573,52 @@ TEST_CASE("[Dictionary] Typed copying") {
 	d6.clear();
 }
 
+TEST_CASE("[Dictionary] infer_typed_key() and infer_typed_value()") {
+	Dictionary d1;
+	d1["zero"] = 0;
+	d1["one"] = 1;
+	CHECK(d1.infer_typed_key());
+	CHECK(d1.infer_typed_value());
+	CHECK_EQ(d1.get_typed_key_builtin(), Variant::STRING);
+	CHECK_EQ(d1.get_typed_value_builtin(), Variant::INT);
+
+	Dictionary d2;
+	d2["zero"] = 0;
+	d2[1] = "one";
+	CHECK_FALSE(d2.infer_typed_key());
+	CHECK_FALSE(d2.infer_typed_value());
+
+	Dictionary d3;
+	d3["zero"] = 0;
+	d3["one"] = "one";
+	CHECK(d3.infer_typed_key());
+	CHECK_FALSE(d3.infer_typed_value());
+	CHECK_EQ(d3.get_typed_key_builtin(), Variant::STRING);
+
+	Dictionary d4;
+	d4["zero"] = 0;
+	d4[1] = 1;
+	CHECK_FALSE(d4.infer_typed_key());
+	CHECK(d4.infer_typed_value());
+	CHECK_EQ(d4.get_typed_value_builtin(), Variant::INT);
+
+	Dictionary d5;
+	CHECK(d5.infer_typed_key());
+	CHECK(d5.infer_typed_value());
+
+	TypedDictionary<String, int> d6;
+	d6["zero"] = 0;
+	CHECK(d6.infer_typed_key());
+	CHECK(d6.infer_typed_value());
+
+	d1.clear();
+	d2.clear();
+	d3.clear();
+	d4.clear();
+	d5.clear();
+	d6.clear();
+}
+
 } // namespace TestDictionary
 
 #endif // TEST_DICTIONARY_H

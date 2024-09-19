@@ -590,6 +590,82 @@ Dictionary Dictionary::recursive_duplicate(bool p_deep, int recursion_count) con
 	return n;
 }
 
+#define GET_TYPE_INFO(variant, prefix)                  \
+	Variant::Type prefix##_type = variant.get_type();   \
+	StringName prefix##_class_name;                     \
+	Ref<Script> prefix##_script;                        \
+	if (prefix##_type == Variant::OBJECT) {             \
+		Object *object = variant;                       \
+		prefix##_class_name = object->get_class_name(); \
+		prefix##_script = object->get_script();         \
+	}
+#define TYPE_INFO_EQUAL(a, b)                                                                                                  \
+	(a##_type != b##_type ? false : a##_type == Variant::OBJECT ? a##_class_name == b##_class_name && a##_script == b##_script \
+																: true)
+
+bool Dictionary::infer_typed_key() {
+	ERR_FAIL_COND_V_MSG(_p->read_only, "Dictionary is in read-only state.", false);
+	ERR_FAIL_COND_V_MSG(_p->refcount.get() > 1, "Type can only be set when dictionary has no more than one user.", false);
+
+	if (is_typed_key()) {
+		// Dictionary is already typed.
+		return true;
+	}
+
+	if (is_empty()) {
+		// Empty dictionary should stay untyped.
+		return true;
+	}
+
+	GET_TYPE_INFO(get_key_at_index(0), key);
+	for (int i = 1; i < size(); i++) {
+		GET_TYPE_INFO(get_key_at_index(i), cur_key);
+		if (!TYPE_INFO_EQUAL(key, cur_key)) {
+			return false;
+		}
+	}
+
+	_p->typed_key.type = key_type;
+	_p->typed_key.class_name = key_class_name;
+	_p->typed_key.script = key_script;
+	_p->typed_key.where = "TypedDictionary.Key";
+
+	return true;
+}
+
+bool Dictionary::infer_typed_value() {
+	ERR_FAIL_COND_V_MSG(_p->read_only, "Dictionary is in read-only state.", false);
+	ERR_FAIL_COND_V_MSG(_p->refcount.get() > 1, "Type can only be set when dictionary has no more than one user.", false);
+
+	if (is_typed_value()) {
+		// Dictionary is already typed.
+		return true;
+	}
+
+	if (is_empty()) {
+		// Empty dictionary should stay untyped.
+		return true;
+	}
+
+	GET_TYPE_INFO(get_value_at_index(0), value);
+	for (int i = 1; i < size(); i++) {
+		GET_TYPE_INFO(get_value_at_index(i), cur_value);
+		if (!TYPE_INFO_EQUAL(value, cur_value)) {
+			return false;
+		}
+	}
+
+	_p->typed_value.type = value_type;
+	_p->typed_value.class_name = value_class_name;
+	_p->typed_value.script = value_script;
+	_p->typed_value.where = "TypedDictionary.Value";
+
+	return true;
+}
+
+#undef TYPE_INFO_EQUAL
+#undef GET_TYPE_INFO
+
 void Dictionary::set_typed(uint32_t p_key_type, const StringName &p_key_class_name, const Variant &p_key_script, uint32_t p_value_type, const StringName &p_value_class_name, const Variant &p_value_script) {
 	ERR_FAIL_COND_MSG(_p->read_only, "Dictionary is in read-only state.");
 	ERR_FAIL_COND_MSG(_p->variant_map.size() > 0, "Type can only be set when dictionary is empty.");

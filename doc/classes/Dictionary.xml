@@ -328,6 +328,22 @@
 				[b]Note:[/b] Dictionaries with equal hash values are [i]not[/i] guaranteed to be the same, because of hash collisions. On the contrary, dictionaries with different hash values are guaranteed to be different.
 			</description>
 		</method>
+		<method name="infer_typed_key">
+			<return type="bool" />
+			<description>
+				Attempts to make the dictionary's key typed. Returns [code]false[/code] if the dictionary's keys have different types.
+				[b]Note:[/b] This method returns [code]true[/code] if the dictionary is empty or if its key is already typed.
+				[b]Note:[/b] This method will fail on dictionaries referenced by multiple variables.
+			</description>
+		</method>
+		<method name="infer_typed_value">
+			<return type="bool" />
+			<description>
+				Attempts to make the dictionary's value typed. Returns [code]false[/code] if the dictionary's values have different types.
+				[b]Note:[/b] This method returns [code]true[/code] if the dictionary is empty or if its value is already typed.
+				[b]Note:[/b] This method will fail on dictionaries referenced by multiple variables.
+			</description>
+		</method>
 		<method name="is_empty" qualifiers="const">
 			<return type="bool" />
 			<description>

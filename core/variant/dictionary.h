@@ -90,6 +90,8 @@ public:
 	Dictionary duplicate(bool p_deep = false) const;
 	Dictionary recursive_duplicate(bool p_deep, int recursion_count) const;
 
+	bool infer_typed_key();
+	bool infer_typed_value();
 	void set_typed(uint32_t p_key_type, const StringName &p_key_class_name, const Variant &p_key_script, uint32_t p_value_type, const StringName &p_value_class_name, const Variant &p_value_script);
 	bool is_typed() const;
 	bool is_typed_key() const;

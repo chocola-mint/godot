@@ -2267,6 +2267,8 @@ static void _register_variant_builtin_methods_misc() {
 	bind_method(Dictionary, duplicate, sarray("deep"), varray(false));
 	bind_method(Dictionary, get, sarray("key", "default"), varray(Variant()));
 	bind_method(Dictionary, get_or_add, sarray("key", "default"), varray(Variant()));
+	bind_method(Dictionary, infer_typed_key, sarray(), varray());
+	bind_method(Dictionary, infer_typed_value, sarray(), varray());
 	bind_method(Dictionary, is_typed, sarray(), varray());
 	bind_method(Dictionary, is_typed_key, sarray(), varray());
 	bind_method(Dictionary, is_typed_value, sarray(), varray());
