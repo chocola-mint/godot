@@ -32,6 +32,8 @@
 
 #include "scene/resources/atlas_texture.h"
 
+HashMap<SpriteMeshKey, RID, SpriteMeshHasher> SpriteBase3D::sprite_meshes;
+
 Color SpriteBase3D::_get_color_accum() {
 	if (!color_dirty) {
 		return color_accum;
@@ -221,6 +223,27 @@ void SpriteBase3D::draw_texture_rect(Ref<Texture2D> p_texture, Rect2 p_dst_rect,
 		uint8_t(CLAMP(color.a * 255.0, 0.0, 255.0))
 	};
 
+	SpriteMeshKey sprite_mesh_key;
+	memcpy(&sprite_mesh_key.vertices, vertices, sizeof(Vector2) * 4);
+	memcpy(&sprite_mesh_key.uvs, uvs, sizeof(Vector2) * 4);
+	sprite_mesh_key.v_color = *(uint32_t *)v_color;
+	sprite_mesh_key.v_normal = v_normal;
+	// Remove old entry.
+	if (last_sprite_mesh_key != sprite_mesh_key) {
+		sprite_meshes.erase(last_sprite_mesh_key);
+		shared_mesh = RID();
+	}
+	RID *mesh_ptr = sprite_meshes.getptr(sprite_mesh_key);
+	if (mesh_ptr) {
+		last_sprite_mesh_key = sprite_mesh_key;
+		// No need to update mesh data. Just draw with this mesh instead.
+		if (get_base() != *mesh_ptr) {
+			set_base(*mesh_ptr);
+		}
+		shared_mesh = *mesh_ptr;
+		return;
+	}
+
 	for (int i = 0; i < 4; i++) {
 		Vector3 vtx;
 		vtx[x_axis] = vertices[i][0];
@@ -243,7 +266,11 @@ void SpriteBase3D::draw_texture_rect(Ref<Texture2D> p_texture, Rect2 p_dst_rect,
 		memcpy(&attribute_write_buffer[i * attrib_stride + mesh_surface_offsets[RS::ARRAY_COLOR]], v_color, 4);
 	}
 
-	RID mesh_new = get_mesh();
+	RID mesh_new = mesh;
+	set_base(mesh_new);
+	// Expose this mesh for sharing.
+	last_sprite_mesh_key = sprite_mesh_key;
+	shared_mesh_iterator = sprite_meshes.insert(sprite_mesh_key, mesh_new);
 	RS::get_singleton()->mesh_surface_update_vertex_region(mesh_new, 0, 0, vertex_buffer);
 	RS::get_singleton()->mesh_surface_update_attribute_region(mesh_new, 0, 0, attribute_buffer);
 
@@ -753,6 +780,8 @@ SpriteBase3D::~SpriteBase3D() {
 	ERR_FAIL_NULL(RenderingServer::get_singleton());
 	RenderingServer::get_singleton()->free(mesh);
 	RenderingServer::get_singleton()->free(material);
+
+	sprite_meshes.remove(shared_mesh_iterator);
 }
 
 ///////////////////////////////////////////

@@ -34,6 +34,25 @@
 #include "scene/3d/visual_instance_3d.h"
 #include "scene/resources/sprite_frames.h"
 
+struct SpriteMeshKey {
+	Vector2 vertices[4];
+	Vector2 uvs[4];
+	uint32_t v_color;
+	uint32_t v_normal;
+	bool operator==(const SpriteMeshKey &other) const {
+		return memcmp(this, &other, sizeof(SpriteMeshKey)) == 0;
+	}
+	bool operator!=(const SpriteMeshKey &other) const {
+		return memcmp(this, &other, sizeof(SpriteMeshKey)) != 0;
+	}
+};
+
+struct SpriteMeshHasher {
+	static _FORCE_INLINE_ uint32_t hash(const SpriteMeshKey &p_mesh_key) {
+		return hash_murmur3_buffer(&p_mesh_key, sizeof(SpriteMeshKey));
+	}
+};
+
 class SpriteBase3D : public GeometryInstance3D {
 	GDCLASS(SpriteBase3D, GeometryInstance3D);
 
@@ -59,6 +78,11 @@ public:
 	};
 
 private:
+	static HashMap<SpriteMeshKey, RID, SpriteMeshHasher> sprite_meshes;
+	SpriteMeshKey last_sprite_mesh_key;
+	RID shared_mesh;
+	HashMap<SpriteMeshKey, RID, SpriteMeshHasher>::Iterator shared_mesh_iterator; // Points to this Sprite's own mesh.
+
 	bool color_dirty = true;
 	Color color_accum;
 
@@ -105,7 +129,7 @@ protected:
 	virtual void _draw() = 0;
 	void draw_texture_rect(Ref<Texture2D> p_texture, Rect2 p_dst_rect, Rect2 p_src_rect);
 	_FORCE_INLINE_ void set_aabb(const AABB &p_aabb) { aabb = p_aabb; }
-	_FORCE_INLINE_ RID &get_mesh() { return mesh; }
+	_FORCE_INLINE_ RID &get_mesh() { return shared_mesh.is_valid() ? shared_mesh : mesh; }
 	_FORCE_INLINE_ RID &get_material() { return material; }
 
 	uint32_t mesh_surface_offsets[RS::ARRAY_MAX];
