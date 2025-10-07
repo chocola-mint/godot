@@ -40,8 +40,6 @@
 #include "core/variant/variant.h"
 #include "core/variant/variant_internal.h"
 
-#include <cstdio>
-
 // Variant cannot define an implicit cast operator for every Object subclass, so the
 // casting is done here, to allow binding methods with parameters more specific than Object *
 
