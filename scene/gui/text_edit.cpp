@@ -5056,7 +5056,7 @@ Point2i TextEdit::get_pos_at_line_column(int p_line, int p_column) const {
 Rect2i TextEdit::get_rect_at_line_column(int p_line, int p_column) const {
 	ERR_FAIL_INDEX_V(p_line, text.size(), Rect2i(-1, -1, 0, 0));
 	ERR_FAIL_COND_V(p_column < 0, Rect2i(-1, -1, 0, 0));
-	ERR_FAIL_COND_V(p_column > text[p_line].length(), Rect2i(-1, -1, 0, 0));
+	ERR_FAIL_COND_V(p_column > text.get_text_with_ime(p_line).length(), Rect2i(-1, -1, 0, 0));
 
 	if (text.size() == 1 && text[0].is_empty()) {
 		// The TextEdit is empty.
