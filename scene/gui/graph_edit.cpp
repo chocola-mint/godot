@@ -312,8 +312,6 @@ bool GraphEdit::is_node_connected(const StringName &p_from, int p_from_port, con
 }
 
 void GraphEdit::disconnect_node(const StringName &p_from, int p_from_port, const StringName &p_to, int p_to_port) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	Ref<Connection> conn_to_remove;
 	for (const Ref<Connection> &conn : connections) {
 		if (conn->from_node == p_from && conn->from_port == p_from_port && conn->to_node == p_to && conn->to_port == p_to_port) {
@@ -330,7 +328,7 @@ void GraphEdit::disconnect_node(const StringName &p_from, int p_from_port, const
 
 		minimap->queue_redraw();
 		queue_redraw();
-		connections_layer->queue_redraw();
+		_redraw_connections_layer();
 		callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 	}
 }
@@ -436,8 +434,6 @@ void GraphEdit::_scrollbar_moved(double) {
 }
 
 void GraphEdit::_update_scroll_offset() {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	set_block_minimum_size_adjust(true);
 
 	for (int i = 0; i < get_child_count(); i++) {
@@ -454,7 +450,9 @@ void GraphEdit::_update_scroll_offset() {
 		}
 	}
 
-	connections_layer->set_position(-scroll_offset);
+	if (connections_layer) {
+		connections_layer->set_position(-scroll_offset);
+	}
 	set_block_minimum_size_adjust(false);
 	awaiting_scroll_offset_update = false;
 
@@ -619,29 +617,24 @@ void GraphEdit::_graph_element_resize_request(const Vector2 &p_new_minsize, Node
 }
 
 void GraphEdit::_graph_frame_autoshrink_changed(const Vector2 &p_new_minsize, GraphFrame *p_frame) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	_update_graph_frame(p_frame);
 
 	minimap->queue_redraw();
-	queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 }
 
 void GraphEdit::_graph_element_moved(Node *p_node) {
 	GraphElement *graph_element = Object::cast_to<GraphElement>(p_node);
 	ERR_FAIL_NULL(graph_element);
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
 
 	minimap->queue_redraw();
 	queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 }
 
 void GraphEdit::_graph_node_slot_updated(int p_index, Node *p_node) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
 	GraphNode *graph_node = Object::cast_to<GraphNode>(p_node);
 	ERR_FAIL_NULL(graph_node);
 
@@ -652,13 +645,11 @@ void GraphEdit::_graph_node_slot_updated(int p_index, Node *p_node) {
 
 	minimap->queue_redraw();
 	queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 }
 
 void GraphEdit::_graph_node_rect_changed(GraphNode *p_node) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	// Only invalidate the cache when zooming or the node is moved/resized in graph space.
 	if (panner->is_panning()) {
 		return;
@@ -667,7 +658,7 @@ void GraphEdit::_graph_node_rect_changed(GraphNode *p_node) {
 	for (Ref<Connection> &conn : connection_map[p_node->get_name()]) {
 		conn->_cache.dirty = true;
 	}
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 
 	// Update all parent frames recursively bottom-up.
@@ -717,7 +708,9 @@ void GraphEdit::add_child_notify(Node *p_child) {
 			background_nodes_separator_idx++;
 
 			callable_mp((Node *)this, &Node::move_child).call_deferred(graph_frame, 0);
-			callable_mp((Node *)this, &Node::move_child).call_deferred(connections_layer, background_nodes_separator_idx);
+			if (connections_layer) {
+				callable_mp((Node *)this, &Node::move_child).call_deferred(connections_layer, background_nodes_separator_idx);
+			}
 
 			_update_graph_frame(graph_frame);
 
@@ -725,9 +718,7 @@ void GraphEdit::add_child_notify(Node *p_child) {
 		}
 		graph_element->connect("raise_request", callable_mp(this, &GraphEdit::_ensure_node_order_from).bind(graph_element));
 		graph_element->connect("resize_request", callable_mp(this, &GraphEdit::_graph_element_resize_request).bind(graph_element));
-		if (connections_layer != nullptr) {
-			graph_element->connect(SceneStringName(item_rect_changed), callable_mp((CanvasItem *)connections_layer, &CanvasItem::queue_redraw));
-		}
+		graph_element->connect(SceneStringName(item_rect_changed), callable_mp(this, &GraphEdit::_redraw_connections_layer));
 		graph_element->connect(SceneStringName(item_rect_changed), callable_mp((CanvasItem *)minimap, &GraphEditMinimap::queue_redraw));
 
 		graph_element->set_scale(Vector2(zoom, zoom));
@@ -806,9 +797,7 @@ void GraphEdit::remove_child_notify(Node *p_child) {
 		graph_element->disconnect("raise_request", callable_mp(this, &GraphEdit::_ensure_node_order_from));
 		graph_element->disconnect("resize_request", callable_mp(this, &GraphEdit::_graph_element_resize_request));
 
-		if (connections_layer != nullptr && connections_layer->is_inside_tree()) {
-			graph_element->disconnect(SceneStringName(item_rect_changed), callable_mp((CanvasItem *)connections_layer, &CanvasItem::queue_redraw));
-		}
+		graph_element->disconnect(SceneStringName(item_rect_changed), callable_mp(this, &GraphEdit::_redraw_connections_layer));
 
 		// In case of the whole GraphEdit being destroyed these references can already be freed.
 		if (minimap != nullptr && minimap->is_inside_tree()) {
@@ -852,6 +841,34 @@ void GraphEdit::_notification(int p_what) {
 			v_scrollbar->set_anchor_and_offset(SIDE_RIGHT, ANCHOR_END, 0);
 			v_scrollbar->set_anchor_and_offset(SIDE_TOP, ANCHOR_BEGIN, 0);
 			v_scrollbar->set_anchor_and_offset(SIDE_BOTTOM, ANCHOR_END, 0);
+
+			if (!connections_layer) {
+				// Deferred initialization of connections layer.
+				// If a plain Control node has been copied from another GraphEdit, we'll use that node instead of
+				// creating a new one.
+				// If the child has an owner or a script, then we'll assume that it is created by the user manually and skip it.
+				// We look from the start of the children list because nodes added by the user are always placed in the back.
+				// (GraphElements always get moved forward)
+				for (int i = 0; i < get_child_count(); i++) {
+					Node *child = get_child(i);
+					if (!connections_layer && &child->get_gdtype() == &Control::get_gdtype_static() && !child->get_owner() && !child->get_script()) {
+						connections_layer = Object::cast_to<Control>(child);
+						if (connections_layer) {
+							break;
+						}
+					}
+				}
+				if (!connections_layer) {
+					connections_layer = memnew(Control);
+					add_child(connections_layer, false);
+				}
+				connections_layer->connect(SceneStringName(draw), callable_mp(this, &GraphEdit::_update_connections));
+				connections_layer->set_name("_connection_layer");
+				connections_layer->set_disable_visibility_clip(true); // Necessary, so it can draw freely and be offset.
+				connections_layer->set_mouse_filter(MOUSE_FILTER_IGNORE);
+				connections_layer->set_position(-scroll_offset); // Apply scroll offset.
+				move_child(connections_layer, background_nodes_separator_idx);
+			}
 		} break;
 		case NOTIFICATION_DRAW: {
 			// Draw background fill.
@@ -1980,8 +1997,6 @@ void GraphEdit::set_selected(Node *p_child) {
 }
 
 void GraphEdit::gui_input(const Ref<InputEvent> &p_ev) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	ERR_FAIL_COND(p_ev.is_null());
 	if (panner->gui_input(p_ev, get_global_rect())) {
 		return;
@@ -1992,7 +2007,7 @@ void GraphEdit::gui_input(const Ref<InputEvent> &p_ev) {
 	if (mm.is_valid()) {
 		Ref<Connection> new_highlighted_connection = get_closest_connection_at_point(mm->get_position());
 		if (new_highlighted_connection != hovered_connection) {
-			connections_layer->queue_redraw();
+			_redraw_connections_layer();
 		}
 		hovered_connection = new_highlighted_connection;
 	}
@@ -2328,9 +2343,13 @@ void GraphEdit::key_input(const Ref<InputEvent> &p_ev) {
 	}
 }
 
-void GraphEdit::_pan_callback(Vector2 p_scroll_vec, Ref<InputEvent> p_event) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
+void GraphEdit::_redraw_connections_layer() {
+	if (connections_layer) {
+		connections_layer->queue_redraw();
+	}
+}
 
+void GraphEdit::_pan_callback(Vector2 p_scroll_vec, Ref<InputEvent> p_event) {
 	scroll_offset = (scroll_offset - p_scroll_vec).clamp(min_scroll_offset, max_scroll_offset - get_size());
 
 	if (!awaiting_scroll_offset_update) {
@@ -2340,7 +2359,7 @@ void GraphEdit::_pan_callback(Vector2 p_scroll_vec, Ref<InputEvent> p_event) {
 	minimap->queue_redraw();
 	queue_redraw();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 }
 
 void GraphEdit::_zoom_callback(float p_zoom_factor, Vector2 p_origin, Ref<InputEvent> p_event) {
@@ -2352,15 +2371,13 @@ void GraphEdit::_zoom_callback(float p_zoom_factor, Vector2 p_origin, Ref<InputE
 }
 
 void GraphEdit::set_connection_activity(const StringName &p_from, int p_from_port, const StringName &p_to, int p_to_port, float p_activity) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	for (Ref<Connection> &conn : connection_map[p_from]) {
 		if (conn->from_node == p_from && conn->from_port == p_from_port && conn->to_node == p_to && conn->to_port == p_to_port) {
 			if (!Math::is_equal_approx(conn->activity, p_activity)) {
 				// Update only if changed.
 				minimap->queue_redraw();
 				conn->_cache.dirty = true;
-				connections_layer->queue_redraw();
+				_redraw_connections_layer();
 				callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 			}
 			conn->activity = p_activity;
@@ -2370,8 +2387,6 @@ void GraphEdit::set_connection_activity(const StringName &p_from, int p_from_por
 }
 
 void GraphEdit::reset_all_connection_activity() {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	bool changed = false;
 	for (Ref<Connection> &conn : connections) {
 		if (conn->activity > 0) {
@@ -2381,13 +2396,11 @@ void GraphEdit::reset_all_connection_activity() {
 		conn->activity = 0;
 	}
 	if (changed) {
-		connections_layer->queue_redraw();
+		_redraw_connections_layer();
 	}
 }
 
 void GraphEdit::clear_connections() {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	for (Ref<Connection> &conn : connections) {
 		conn->_cache.line->queue_free();
 	}
@@ -2397,11 +2410,10 @@ void GraphEdit::clear_connections() {
 
 	minimap->queue_redraw();
 	queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 }
 
 void GraphEdit::force_connection_drag_end() {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
 	ERR_FAIL_COND_MSG(!connecting, "Drag end requested without active drag!");
 
 	connecting = false;
@@ -2409,7 +2421,7 @@ void GraphEdit::force_connection_drag_end() {
 	keyboard_connecting = false;
 	minimap->queue_redraw();
 	queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 	emit_signal(SNAME("connection_drag_ended"));
 }
@@ -2434,8 +2446,6 @@ void GraphEdit::set_zoom(float p_zoom) {
 }
 
 void GraphEdit::set_zoom_custom(float p_zoom, const Vector2 &p_center) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	p_zoom = CLAMP(p_zoom, zoom_min, zoom_max);
 	if (zoom == p_zoom) {
 		return;
@@ -2452,7 +2462,7 @@ void GraphEdit::set_zoom_custom(float p_zoom, const Vector2 &p_center) {
 
 	_update_scrollbars();
 	minimap->queue_redraw();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 
 	if (is_visible_in_tree()) {
 		scroll_offset = zoom_anchor * zoom - p_center;
@@ -2875,12 +2885,10 @@ bool GraphEdit::is_showing_arrange_button() const {
 }
 
 void GraphEdit::override_connections_shader(const Ref<Shader> &p_shader) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	connections_shader = p_shader;
 
 	_invalidate_connection_line_cache();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	minimap->queue_redraw();
 	callable_mp(this, &GraphEdit::_update_top_connection_layer).call_deferred();
 }
@@ -2895,11 +2903,9 @@ void GraphEdit::_minimap_toggled() {
 }
 
 void GraphEdit::set_connection_lines_curvature(float p_curvature) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	lines_curvature = p_curvature;
 	_invalidate_connection_line_cache();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	queue_redraw();
 }
 
@@ -2908,7 +2914,6 @@ float GraphEdit::get_connection_lines_curvature() const {
 }
 
 void GraphEdit::set_connection_lines_thickness(float p_thickness) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
 	ERR_FAIL_COND_MSG(p_thickness < 0, "Connection lines thickness must be greater than or equal to 0.");
 
 	if (lines_thickness == p_thickness) {
@@ -2916,7 +2921,7 @@ void GraphEdit::set_connection_lines_thickness(float p_thickness) {
 	}
 	lines_thickness = p_thickness;
 	_invalidate_connection_line_cache();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	queue_redraw();
 }
 
@@ -2925,14 +2930,12 @@ float GraphEdit::get_connection_lines_thickness() const {
 }
 
 void GraphEdit::set_connection_lines_antialiased(bool p_antialiased) {
-	ERR_FAIL_NULL_MSG(connections_layer, "connections_layer is missing.");
-
 	if (lines_antialiased == p_antialiased) {
 		return;
 	}
 	lines_antialiased = p_antialiased;
 	_invalidate_connection_line_cache();
-	connections_layer->queue_redraw();
+	_redraw_connections_layer();
 	queue_redraw();
 }
 
@@ -3190,13 +3193,6 @@ GraphEdit::GraphEdit() {
 	top_layer->set_anchors_and_offsets_preset(Control::PRESET_FULL_RECT);
 	top_layer->connect(SceneStringName(draw), callable_mp(this, &GraphEdit::_top_layer_draw));
 	top_layer->connect(SceneStringName(focus_exited), callable_mp(panner.ptr(), &ViewPanner::release_pan_key));
-
-	connections_layer = memnew(Control);
-	add_child(connections_layer, false);
-	connections_layer->connect(SceneStringName(draw), callable_mp(this, &GraphEdit::_update_connections));
-	connections_layer->set_name("_connection_layer");
-	connections_layer->set_disable_visibility_clip(true); // Necessary, so it can draw freely and be offset.
-	connections_layer->set_mouse_filter(MOUSE_FILTER_IGNORE);
 
 	top_connection_layer = memnew(GraphEditFilter(this));
 	add_child(top_connection_layer, false, INTERNAL_MODE_BACK);

@@ -312,6 +312,8 @@ private:
 
 	Dictionary type_names;
 
+	void _redraw_connections_layer();
+
 	void _pan_callback(Vector2 p_scroll_vec, Ref<InputEvent> p_event);
 	void _zoom_callback(float p_zoom_factor, Vector2 p_origin, Ref<InputEvent> p_event);
 
@@ -324,8 +326,13 @@ private:
 	void _graph_element_deselected(Node *p_node);
 	void _graph_element_visibility_changed(GraphElement *p_graph_element);
 	void _graph_element_resize_request(const Vector2 &p_new_minsize, Node *p_node);
+	void _graph_element_setup_connections_layer();
 	void _graph_frame_autoshrink_changed(const Vector2 &p_new_minsize, GraphFrame *p_frame);
+
+public:
 	void _graph_element_moved(Node *p_node);
+
+private:
 	void _graph_node_slot_updated(int p_index, Node *p_node);
 	void _graph_node_rect_changed(GraphNode *p_node);
 
